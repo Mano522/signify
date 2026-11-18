@@ -1,0 +1,83 @@
+.intro-container {
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+.content {
+  text-align: center;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.logo-text {
+  font-family: 'Pacifico', cursive;
+  font-size: 5rem;
+  color: #7C3AED;
+  margin: 0;
+  font-weight: 400;
+}
+
+.subtitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 2rem;
+  color: #120627; 
+}
+
+.discover-button {
+  background-color: #7C3AED;
+  color: white;
+  border: none;
+  padding: 1rem 2.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.discover-button:hover {
+  background-color: #6D28D9;
+  transform: translateY(-2px);
+}
+
+.footer-text {
+  position: absolute;
+  bottom: 2.5rem;
+  color: #7C3AED;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.music-note {
+  position: absolute;
+  color: #F3E8FF;
+  font-size: 8rem;
+  user-select: none;
+  z-index: 1;
+  opacity: 0.6;
+}
+
+.note-1 { top: 10%; left: 25%; transform: rotate(-15deg); }
+.note-2 { top: 20%; right: 10%; transform: rotate(10deg); font-size: 8rem; }
+.note-3 { bottom: 20%; left: 20%; transform: rotate(20deg); font-size: 10rem; }
+.note-4 { bottom: 10%; right: 15%; transform: rotate(-15deg); }
+
+@media (max-width: 640px) {
+  .logo-text { font-size: 4rem; }
+  .subtitle { font-size: 1.1rem; }
+  .music-note { font-size: 5rem; }
+}

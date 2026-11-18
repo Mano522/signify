@@ -1,0 +1,243 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Outfit:wght@500;700&family=Pacifico&display=swap');
+
+/* ── Base Container ───────────────────────── */
+.home-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f9f7ff, #b06fec);
+  color: #1f2937;
+  font-family: 'Inter', sans-serif;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Glass Utility ───────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 8px 32px rgba(124, 58, 237, 0.15),
+    inset 0 1px 1px rgba(255,255,255,0.4);
+  border-radius: 18px;
+}
+
+
+.home-header {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 3rem;
+}
+
+.logo-small {
+  font-family: 'Pacifico', cursive;
+  margin-bottom: 10px;
+  font-size: 4.5rem;
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.search-bar {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 40px;
+
+  background: rgba(255,255,255,0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.5);
+
+  transition: all 0.3s ease;
+}
+
+.search-bar:focus-within {
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.25);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.search-bar input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 10px 20px;
+  outline: none;
+}
+
+.search-bar button {
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  border: none;
+  color: white;
+  padding: 10px 25px;
+  border-radius: 25px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Section Header ───────────────────────── */
+.section-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.8rem;
+  border-left: 4px solid #7C3AED;
+  padding-left: 1rem;
+  color: #7C3AED;
+}
+
+.song-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1000px;
+}
+
+
+.song-card {
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  background: rgba(255,255,255,0.45);
+  backdrop-filter: blur(14px);
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.4);
+
+  box-shadow: 
+    0 6px 20px rgba(124, 58, 237, 0.12),
+    inset 0 1px 1px rgba(255,255,255,0.3);
+}
+
+.song-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.25);
+}
+
+.song-card.active {
+  border: 1px solid rgba(124, 58, 237, 0.5);
+  background: rgba(167, 139, 250, 0.25);
+}
+
+/* ── Player (Floating Glass Bar) ───────────── */
+.music-player {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1000px;
+
+  padding: 15px 30px;
+
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+
+  border: 1px solid rgba(255,255,255,0.4);
+
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+}
+
+/* ── Controls ───────────────────────── */
+.control-btn {
+  background: none;
+  border: none;
+  color: #7C3AED;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.control-btn:hover {
+  transform: scale(1.2);
+}
+
+.play-pause {
+  font-size: 2rem;
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
+}
+
+/* ── Chips ───────────────────────── */
+.chip {
+  background: rgba(255,255,255,0.4);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.chip.active {
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  color: white;
+}
+
+/* ── Loader ───────────────────────── */
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255,255,255,0.4);
+  border-bottom-color: #7C3AED;
+  border-radius: 50%;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Recent Searches ───────────────────────── */
+.recent-searches-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 15px;
+  width: 100%;
+}
+
+.recent-search-pill {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #4B5563;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recent-search-pill:hover {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.4);
+  color: #7C3AED;
+}
+
+.delete-recent-btn {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  color: #9CA3AF;
+  border-radius: 50%;
+  padding: 2px 4px;
+  transition: all 0.2s ease;
+}
+
+.delete-recent-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+}
