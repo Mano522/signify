@@ -17,3 +17,4 @@ Search and recommendations combine results from the public Jamendo and Audius ca
 
 Jamendo's public API client identifier is configured in `src/services/jamendoService.js`. Check the providers' current API and licensing terms before deploying or redistributing catalog streams.
 # signify
+# signify
