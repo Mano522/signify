@@ -339,12 +339,8 @@
   letter-spacing: 0.04em;
 }
 
-.badge-youtube {
-  background: rgba(239, 68, 68, 0.15);
-  color: #DC2626;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
+.badge-audius,
+.badge-jamendo,
 .badge-deezer {
   background: rgba(124, 58, 237, 0.15);
   color: #7C3AED;

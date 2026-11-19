@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './home.css';
 
 // Services
-import { MOODS, getTracksByMood } from '../../../services/lastfmService.js';
-import { searchUniversal, enrichTrack, searchITunesSongs } from '../../../services/catalogService.js';
-import { searchYouTubeVideos } from '../../../services/youtubeService.js';
+import { MOODS } from '../../../services/lastfmService.js';
+import { fetchCatalogRecommendations, searchUniversal } from '../../../services/catalogService.js';
 import {
   generateRecommendations,
   refillQueueIfNeeded,
@@ -19,7 +18,6 @@ import {
 } from '../../../services/preferenceService.js';
 import {
   addToPlaylist,
-  getFavorites,
   getPlaylists,
   isFavorite,
   toggleFavorite,
@@ -29,7 +27,7 @@ import {
 import Footer from '../Layoutss/footer.jsx';
 import Sidebar from '../Sidebar.jsx';
 import QueuePanel from '../QueuePanel.jsx';
-import YouTubePlayer from '../YouTubePlayer.jsx';
+import AudioPlayer from '../AudioPlayer.jsx';
 
 const formatTime = (secs) => {
   if (!secs || isNaN(secs)) return '0:00';
@@ -74,16 +72,14 @@ export default function Home() {
   const [volume, setVolume] = useState(80);
   const [previousVolume, setPreviousVolume] = useState(80);
   const [seekTime, setSeekTime] = useState(null);
-  const [activeSource, setActiveSource] = useState('youtube'); // 'youtube' | 'audio'
+  const [activeSource, setActiveSource] = useState('');
   const [isShuffle, setIsShuffle] = useState(false);
-  const [isVideoVisible, setIsVideoVisible] = useState(false);
 
   // Toast Notifications
   const [toastMessage, setToastMessage] = useState('');
 
   // Library & Playlists
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [favorites, setFavorites] = useState(getFavorites);
   const [, refreshLibrary] = useState(0);
 
   // Refs
@@ -121,34 +117,14 @@ export default function Home() {
     setError('');
 
     try {
-      // 1. Fetch tracks mapped to this mood from Last.fm
-      let tracks = await getTracksByMood(moodId, 24);
-
-      // 2. If tracks are few or missing artwork, supplement with iTunes / YouTube hits
-      if (tracks.length < 8) {
-        const fallbackQuery = `${moodId} hits`;
-        const itunesTracks = await searchITunesSongs(fallbackQuery, 16);
-        tracks = [...tracks, ...itunesTracks];
+      const tracks = await fetchCatalogRecommendations(moodId, 24);
+      setMoodSongs(tracks);
+      if (tracks.length === 0) {
+        setQueue([]);
+        setError('No playable tracks are currently available from Audius, Jamendo, or Deezer.');
+        return;
       }
 
-      // Enrich tracks missing artwork
-      tracks = tracks.map((t) => {
-        if (!t.artworkUrl) {
-          // Asynchronously enrich in background
-          enrichTrack(t.artist, t.title).then((en) => {
-            if (en && en.artworkUrl) {
-              setMoodSongs((prev) =>
-                prev.map((item) => (item.id === t.id ? { ...item, artworkUrl: en.artworkUrl, previewUrl: en.previewUrl } : item))
-              );
-            }
-          });
-        }
-        return t;
-      });
-
-      setMoodSongs(tracks);
-
-      // 3. Build initial recommendation queue for this mood
       const initialQueue = await generateRecommendations({
         seedSong: tracks[0] || null,
         moodId,
@@ -380,7 +356,6 @@ export default function Home() {
   const handleFavoriteClick = (e, song) => {
     e.stopPropagation();
     const added = toggleFavorite(song);
-    setFavorites(getFavorites());
     refreshLibrary((v) => v + 1);
     showToast(added ? `❤️ Added "${song.title}" to Favorites` : `Removed "${song.title}" from Favorites`);
   };
@@ -619,19 +594,17 @@ export default function Home() {
       {/* Spacer so floating player never covers content */}
       <div style={{ height: 130 }} />
 
-      {/* Audio Coordinator: YouTube IFrame + Audio Fallback */}
-      <YouTubePlayer
+      {/* Audio player with Audius, Jamendo, and Deezer stream fallback */}
+      <AudioPlayer
         currentSong={currentSong}
         isPlaying={isPlaying}
         volume={volume}
         seekTime={seekTime}
-        isVideoVisible={isVideoVisible}
         onTimeUpdate={(t) => setElapsed(t)}
         onDurationChange={(d) => setDuration(d)}
         onEnded={() => playNext(false)}
         onError={(msg) => showToast(msg)}
         onSourceChange={(src) => setActiveSource(src)}
-        onToggleVideo={() => setIsVideoVisible((prev) => !prev)}
       />
 
       {/* Floating Bottom Player Bar */}
@@ -651,8 +624,8 @@ export default function Home() {
               <div className="player-titles">
                 <span className="player-title">{currentSong.title}</span>
                 <span className="player-artist">{currentSong.artist}</span>
-                <span className={`source-badge ${activeSource === 'youtube' ? 'badge-youtube' : 'badge-deezer'}`}>
-                  {activeSource === 'youtube' ? '▶ YouTube Stream' : '🎵 Audio Preview'}
+                <span className={`source-badge badge-${activeSource || currentSong.source || 'audius'}`}>
+                  ♪ {(activeSource || currentSong.source || 'audio').toUpperCase()} STREAM
                 </span>
               </div>
               <button
@@ -706,15 +679,6 @@ export default function Home() {
                 title="Radio from this song"
               >
                 📻
-              </button>
-              <button
-                type="button"
-                className="control-btn"
-                style={{ color: isVideoVisible ? '#7C3AED' : '#9CA3AF' }}
-                onClick={() => setIsVideoVisible((prev) => !prev)}
-                title={isVideoVisible ? 'Hide Video' : 'Show Video'}
-              >
-                🎬
               </button>
             </div>
 

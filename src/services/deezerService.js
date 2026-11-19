@@ -48,8 +48,14 @@ const fetchDeezerJsonp = (endpoint, params = {}) => {
 const fetchDeezerApi = async (endpoint, params = {}) => {
   const query = new URLSearchParams(params).toString();
   const cacheKey = `deezer_${endpoint}_${query}`;
+  let receivedIncompleteResponse = false;
+  const isUsableResponse = (data) => {
+    const incomplete = Array.isArray(data?.data) && data.data.length === 0 && Number(data.total) > 0;
+    if (incomplete) receivedIncompleteResponse = true;
+    return data && !data.error && !incomplete;
+  };
   const cached = getCached(cacheKey);
-  if (cached) return cached;
+  if (isUsableResponse(cached)) return cached;
 
   // 1. Try local Vite proxy first: /api/deezer/...
   try {
@@ -57,7 +63,7 @@ const fetchDeezerApi = async (endpoint, params = {}) => {
     const res = await fetch(proxyUrl, { headers: { Accept: 'application/json' } });
     if (res.ok) {
       const data = await res.json();
-      if (data && !data.error) {
+      if (isUsableResponse(data)) {
         setCached(cacheKey, data);
         return data;
       }
@@ -69,7 +75,7 @@ const fetchDeezerApi = async (endpoint, params = {}) => {
   // 2. Try Deezer JSONP
   try {
     const jsonpData = await fetchDeezerJsonp(endpoint, params);
-    if (jsonpData && !jsonpData.error) {
+    if (isUsableResponse(jsonpData)) {
       setCached(cacheKey, jsonpData);
       return jsonpData;
     }
@@ -84,7 +90,7 @@ const fetchDeezerApi = async (endpoint, params = {}) => {
     const res = await fetch(corsUrl);
     if (res.ok) {
       const data = await res.json();
-      if (data && !data.error) {
+      if (isUsableResponse(data)) {
         setCached(cacheKey, data);
         return data;
       }
@@ -93,6 +99,9 @@ const fetchDeezerApi = async (endpoint, params = {}) => {
     console.warn('Deezer API fallback error:', err);
   }
 
+  if (receivedIncompleteResponse) {
+    console.warn(`Deezer returned an incomplete response for ${endpoint}; other catalogs will be used.`);
+  }
   return null;
 };
 
@@ -141,7 +150,7 @@ export const getDeezerTopTracks = async (limit = 30) => {
 };
 
 /**
- * Enrich a song (e.g. from Last.fm) with high-res Deezer artwork & 30s preview
+ * Enrich a catalog track with Deezer artwork and a playable preview
  */
 export const enrichWithDeezer = async (artist, title) => {
   if (!artist && !title) return null;

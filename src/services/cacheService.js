@@ -1,6 +1,6 @@
 /**
- * Cache Service with 24-hour expiration for all API responses
- * Saves Last.fm, Deezer, and YouTube searches to minimize quota usage.
+ * Cache Service with 24-hour expiration for API responses
+ * Saves catalog responses to reduce repeat network requests.
  */
 
 const CACHE_PREFIX = 'signify_cache_';
@@ -53,7 +53,7 @@ export const setCached = (key, data, ttlMs = DEFAULT_TTL_MS) => {
       savedAt: Date.now(),
     };
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(record));
-  } catch (err) {
+  } catch {
     // If quota exceeded, clean up old expired items and retry
     cleanExpiredCache();
     try {

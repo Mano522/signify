@@ -1,14 +1,13 @@
 /**
  * Client-Side Recommendation Engine
- * - Builds candidate pool from Last.fm track.getSimilar + tag.getTopTracks (selected mood) + iTunes & Deezer
+ * - Builds candidate pool from playable Audius, Jamendo, and Deezer tracks
  * - Scores each candidate: similarity + mood match + liked boost - skipped penalty + slight randomness
  * - Guarantees NO repeat songs within a session (sessionPlayed filter)
  * - Maintains 15 tracks in the recommendation queue, refilling in background
  */
 
-import { getSimilarTracks, getTracksByMood, getMoodConfig } from './lastfmService.js';
-import { enrichTrack, searchITunesSongs } from './catalogService.js';
-import { searchDeezer } from './deezerService.js';
+import { getMoodConfig } from './lastfmService.js';
+import { fetchCatalogRecommendations, searchUniversal } from './catalogService.js';
 import {
   isSessionPlayed,
   getTrackKey,
@@ -87,7 +86,6 @@ export const scoreCandidate = (
 export const generateRecommendations = async ({
   seedSong = null,
   moodId = null,
-  existingQueue = [],
   excludeKeys = new Set(),
   limit = QUEUE_TARGET_SIZE,
 }) => {
@@ -125,34 +123,28 @@ export const generateRecommendations = async ({
     });
   };
 
-  // 1. Fetch similar tracks to seed song (Last.fm track.getSimilar)
-  if (seedSong?.artist && seedSong?.title) {
-    try {
-      const similar = await getSimilarTracks(seedSong.artist, seedSong.title, 30);
-      similar.forEach((track) => addCandidate(track, { match: track.match || 0.7 }));
-    } catch (err) {
-      console.warn('Recommendation: error fetching similar tracks', err);
-    }
-  }
+  const queries = [...new Set([
+    seedSong?.artist,
+    moodId ? `${moodId} music` : '',
+  ].filter(Boolean))];
+  if (queries.length === 0) queries.push('popular music');
 
-  // 2. Fetch mood top tracks (Last.fm tag.getTopTracks)
-  if (moodId) {
-    try {
-      const moodTracks = await getTracksByMood(moodId, 30);
-      moodTracks.forEach((track) => addCandidate(track, { mood: moodId, match: track.match || 0.6 }));
-    } catch (err) {
-      console.warn('Recommendation: error fetching mood tracks', err);
+  const providerResults = await Promise.allSettled(queries.map((query) => searchUniversal(query)));
+  providerResults.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.warn('Recommendation catalog search failed:', result.reason);
+      return;
     }
-  }
+    result.value.forEach((track) => addCandidate(track, { mood: moodId || track.mood, match: 0.6 }));
+  });
 
-  // 3. If pool is small, supplement with iTunes / Deezer
+  // Supplement smaller searches with provider recommendations.
   if (candidatePool.length < limit) {
     try {
-      const query = seedSong?.artist || moodId || 'top hits';
-      const itunesTracks = await searchITunesSongs(query, 15);
-      itunesTracks.forEach((track) => addCandidate(track, { match: 0.5 }));
+      const tracks = await fetchCatalogRecommendations(moodId, Math.max(limit, 24));
+      tracks.forEach((track) => addCandidate(track, { mood: moodId || track.mood, match: 0.5 }));
     } catch (err) {
-      console.warn('Recommendation: error fetching fallback tracks', err);
+      console.warn('Recommendation: provider fallback failed', err);
     }
   }
 
@@ -167,24 +159,6 @@ export const generateRecommendations = async ({
 
   // Take the top candidates needed
   const selected = scored.slice(0, limit);
-
-  // Background enrich top items missing artwork
-  selected.forEach(async (track) => {
-    if (!track.artworkUrl || !track.previewUrl) {
-      try {
-        const enriched = await enrichTrack(track.artist, track.title);
-        if (enriched) {
-          if (!track.artworkUrl && enriched.artworkUrl) track.artworkUrl = enriched.artworkUrl;
-          if (!track.previewUrl && enriched.previewUrl) {
-            track.previewUrl = enriched.previewUrl;
-            if (!track.url) track.url = enriched.previewUrl;
-          }
-        }
-      } catch {
-        // Safe ignore
-      }
-    }
-  });
 
   return selected;
 };
@@ -202,7 +176,6 @@ export const refillQueueIfNeeded = async (currentQueue, seedSong, moodId) => {
   const newTracks = await generateRecommendations({
     seedSong,
     moodId,
-    existingQueue: currentQueue,
     excludeKeys: existingKeys,
     limit: needed,
   });

@@ -6,18 +6,25 @@ import {
   fetchRecommendedSongs as fetchJamendoRecommended,
   searchSongs as searchJamendoSongs,
 } from './jamendoService.js';
+import {
+  getDeezerTopTracks,
+  searchDeezer,
+} from './deezerService.js';
 
 const MAX_RESULTS = 100;
 const CACHE_TTL_MS = 60_000;
+const PROVIDER_TIMEOUT_MS = 12_000;
 const responseCache = new Map();
 const SOURCE_LIMITS = {
   recommended: {
     audius: 24,
     jamendo: 24,
+    deezer: 24,
   },
   search: {
     audius: 40,
     jamendo: 40,
+    deezer: 25,
   },
 };
 
@@ -125,22 +132,50 @@ const withRegionalLanguage = (song) => {
   };
 };
 
-const dedupeSongs = (songs) => {
+const getPlaybackOptions = (song) => {
+  if (!song) return [];
+  const options = [
+    ...(Array.isArray(song.playbackOptions) ? song.playbackOptions : []),
+    { url: song.previewUrl || song.url, source: song.source },
+  ];
   const seen = new Set();
+  return options.filter((option) => {
+    if (!option?.url || seen.has(option.url)) return false;
+    seen.add(option.url);
+    return true;
+  });
+};
+
+const dedupeSongs = (songs) => {
+  const seen = new Map();
   const result = [];
 
   songs.forEach((song) => {
-    if (!song?.url) return;
+    const playbackOptions = getPlaybackOptions(song);
+    if (!song?.title || playbackOptions.length === 0) return;
 
     const titleArtistKey = `${normalize(song.title)}::${normalize(song.artist)}`;
     const key = titleArtistKey !== '::'
       ? titleArtistKey
-      : `${normalize(song.source)}::${normalize(song.url || song.id)}`;
+      : `${normalize(song.source)}::${normalize(playbackOptions[0].url || song.id)}`;
 
-    if (seen.has(key)) return;
+    const existing = seen.get(key);
+    if (existing) {
+      existing.playbackOptions = getPlaybackOptions({
+        ...existing,
+        playbackOptions: [...existing.playbackOptions, ...playbackOptions],
+      });
+      if (!existing.artworkUrl && song.artworkUrl) existing.artworkUrl = song.artworkUrl;
+      return;
+    }
 
-    seen.add(key);
-    result.push(withRegionalLanguage(song));
+    const normalizedSong = withRegionalLanguage({
+      ...song,
+      url: song.url || song.previewUrl || playbackOptions[0].url,
+      playbackOptions,
+    });
+    seen.set(key, normalizedSong);
+    result.push(normalizedSong);
   });
 
   return result;
@@ -208,6 +243,36 @@ const mergeSongs = (primary, fallback) => {
   return dedupeSongs([...(primary || []), ...(fallback || [])]);
 };
 
+const loadProviderWithTimeout = ({ name, load }) => new Promise((resolve, reject) => {
+  const timeoutId = setTimeout(
+    () => reject(new Error(`${name} catalog request timed out`)),
+    PROVIDER_TIMEOUT_MS
+  );
+  Promise.resolve()
+    .then(load)
+    .then(
+      (tracks) => {
+        clearTimeout(timeoutId);
+        resolve(tracks);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+});
+
+const collectProviderTracks = async (providers) => {
+  const results = await Promise.allSettled(providers.map(loadProviderWithTimeout));
+  return results.flatMap((result, index) => {
+    if (result.status === 'rejected') {
+      console.warn(`${providers[index].name} catalog request failed:`, result.reason);
+      return [];
+    }
+    return Array.isArray(result.value) ? result.value : [];
+  });
+};
+
 const editDistance = (left, right) => {
   const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
   for (let row = 1; row <= left.length; row += 1) {
@@ -237,14 +302,28 @@ export const fetchRecommendedSongs = (genre = '', mood = '', languageKey = 'all'
   `recommendations:${normalize(genre)}:${normalize(mood)}:${languageKey}`,
   async () => {
   const query = [genre, mood].filter(Boolean).join(' ');
-  const [audius, jamendo] = await Promise.all([
-    fetchAudiusRecommended(SOURCE_LIMITS.recommended.audius),
-    query
-      ? searchJamendoSongs(query, SOURCE_LIMITS.recommended.jamendo)
-      : fetchJamendoRecommended(SOURCE_LIMITS.recommended.jamendo),
+  const tracks = await collectProviderTracks([
+    {
+      name: 'Audius',
+      load: () => query
+        ? searchAudiusSongs(query, SOURCE_LIMITS.recommended.audius)
+        : fetchAudiusRecommended(SOURCE_LIMITS.recommended.audius),
+    },
+    {
+      name: 'Jamendo',
+      load: () => query
+        ? searchJamendoSongs(query, SOURCE_LIMITS.recommended.jamendo)
+        : fetchJamendoRecommended(SOURCE_LIMITS.recommended.jamendo),
+    },
+    {
+      name: 'Deezer',
+      load: () => query
+        ? searchDeezer(query, SOURCE_LIMITS.recommended.deezer)
+        : getDeezerTopTracks(SOURCE_LIMITS.recommended.deezer),
+    },
   ]);
 
-  const merged = mergeSongs(audius, jamendo);
+  const merged = mergeSongs(tracks, []);
   const filtered = filterByLanguage(merged, languageKey);
 
   if (languageKey !== 'all') return prioritizeRegionalSongs(filtered, languageKey).slice(0, MAX_RESULTS);
@@ -259,12 +338,22 @@ export const searchSongs = (query, genre = '', mood = '', languageKey = 'all') =
 
   const tunedQuery = buildLanguageAwareQuery([query, genre, mood].filter(Boolean).join(' '), languageKey);
 
-  const [audius, jamendo] = await Promise.all([
-    searchAudiusSongs(tunedQuery, SOURCE_LIMITS.search.audius),
-    searchJamendoSongs(tunedQuery, SOURCE_LIMITS.search.jamendo),
+  const tracks = await collectProviderTracks([
+    {
+      name: 'Audius',
+      load: () => searchAudiusSongs(tunedQuery, SOURCE_LIMITS.search.audius),
+    },
+    {
+      name: 'Jamendo',
+      load: () => searchJamendoSongs(tunedQuery, SOURCE_LIMITS.search.jamendo),
+    },
+    {
+      name: 'Deezer',
+      load: () => searchDeezer(tunedQuery, SOURCE_LIMITS.search.deezer),
+    },
   ]);
 
-  const merged = mergeSongs(audius, jamendo);
+  const merged = mergeSongs(tracks, []);
   const filtered = filterByLanguage(merged, languageKey);
   const searchBase = languageKey !== 'all' ? filtered : merged;
   const inferredLanguageKey = languageKey !== 'all' ? languageKey : inferLanguageFromQuery(query);
