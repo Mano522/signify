@@ -1,0 +1,283 @@
+/* ── Queue Panel Styles (Signify Glass Theme) ───────────────────────── */
+
+.queue-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 12, 31, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.queue-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  bottom: 120px;
+  width: 90%;
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 24px;
+  box-shadow: 
+    0 16px 40px rgba(124, 58, 237, 0.22),
+    inset 0 1px 2px rgba(255, 255, 255, 0.6);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  overflow: hidden;
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.queue-close-btn {
+  background: rgba(124, 58, 237, 0.1);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #7C3AED;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.queue-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  transform: rotate(90deg);
+}
+
+.queue-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #7C3AED;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.queue-now-playing {
+  margin-bottom: 1rem;
+}
+
+.queue-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.queue-list::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.25);
+  border-radius: 4px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.queue-item:hover {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(124, 58, 237, 0.35);
+  transform: translateX(4px);
+}
+
+.queue-item.current {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(167, 139, 250, 0.18));
+  border: 1px solid rgba(124, 58, 237, 0.4);
+}
+
+.queue-item.draggable {
+  cursor: grab;
+}
+
+.queue-item.dragging {
+  opacity: 0.4;
+  border: 1px dashed #7C3AED;
+}
+
+.queue-item.drag-over {
+  border-top: 2px solid #7C3AED;
+  background: rgba(124, 58, 237, 0.18);
+}
+
+.drag-handle {
+  color: #9CA3AF;
+  font-size: 1rem;
+  letter-spacing: -2px;
+  cursor: grab;
+}
+
+.queue-index {
+  font-size: 0.8rem;
+  color: #6B7280;
+  width: 16px;
+  text-align: center;
+}
+
+.queue-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-thumb-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: rgba(124, 58, 237, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1F2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-artist {
+  font-size: 0.75rem;
+  color: #6B7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.radio-btn {
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  color: white;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.radio-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+}
+
+.radio-btn-mini {
+  background: transparent;
+  border: none;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: transform 0.2s ease;
+}
+
+.radio-btn-mini:hover {
+  transform: scale(1.25);
+}
+
+.queue-remove-btn {
+  background: transparent;
+  border: none;
+  color: #9CA3AF;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.queue-remove-btn:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.queue-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #6B7280;
+}
+
+.queue-empty span {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .queue-panel {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-width: none;
+    bottom: 110px;
+  }
+}
