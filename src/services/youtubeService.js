@@ -1,6 +1,7 @@
 /**
  * YouTube Service
  * Handles:
+ * - Direct YouTube video search (returns real tracks with videoId & thumbnails)
  * - Just-in-time video ID resolution with 24-hour cache
  * - Error detection (quotaExceeded, network errors)
  * - YouTube IFrame Player API script loader
@@ -22,30 +23,117 @@ export const checkIsYouTubeQuotaExceeded = () => isQuotaExceeded;
 export const loadYouTubeIframeApi = () => {
   if (iframeApiPromise) return iframeApiPromise;
 
-  iframeApiPromise = new Promise((resolve) => {
+  iframeApiPromise = new Promise((resolve, reject) => {
     if (window.YT && window.YT.Player) {
       resolve(window.YT);
       return;
     }
 
     const prevOnReady = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      if (typeof prevOnReady === 'function') prevOnReady();
-      resolve(window.YT);
+    const script = document.getElementById('youtube-iframe-api');
+    const apiScript = script || document.createElement('script');
+    let timeoutId;
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      apiScript.onerror = null;
     };
 
-    // If script already inserted, wait for callback
-    const existing = document.getElementById('youtube-iframe-api');
-    if (!existing) {
-      const script = document.createElement('script');
-      script.id = 'youtube-iframe-api';
-      script.src = 'https://www.youtube.com/iframe_api';
-      script.async = true;
-      document.body.appendChild(script);
+    window.onYouTubeIframeAPIReady = () => {
+      cleanup();
+      if (typeof prevOnReady === 'function') prevOnReady();
+      if (window.YT?.Player) {
+        resolve(window.YT);
+      } else {
+        reject(new Error('YouTube IFrame API loaded without a player.'));
+      }
+    };
+
+    if (!script) {
+      apiScript.id = 'youtube-iframe-api';
+      apiScript.src = 'https://www.youtube.com/iframe_api';
+      apiScript.async = true;
     }
+
+    apiScript.onerror = () => {
+      cleanup();
+      reject(new Error('Unable to load the YouTube IFrame API.'));
+    };
+    timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out loading the YouTube IFrame API.'));
+    }, 15000);
+
+    if (!script) document.body.appendChild(apiScript);
   });
 
   return iframeApiPromise;
+};
+
+/**
+ * Search YouTube Data API for tracks (returns videoId, title, artist, thumbnail)
+ */
+export const searchYouTubeVideos = async (query, maxResults = 15) => {
+  if (!query || !query.trim() || !YOUTUBE_API_KEY || isQuotaExceeded) return [];
+
+  const cleanQ = query.trim();
+  const cacheKey = `yt_search_${encodeURIComponent(cleanQ.toLowerCase())}_${maxResults}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const params = new URLSearchParams({
+      part: 'snippet',
+      type: 'video',
+      videoEmbeddable: 'true',
+      maxResults: String(maxResults),
+      q: `${cleanQ} song`,
+      key: YOUTUBE_API_KEY,
+    });
+
+    const res = await fetch(`${YOUTUBE_SEARCH_BASE}?${params.toString()}`);
+
+    if (res.status === 403) {
+      isQuotaExceeded = true;
+      return [];
+    }
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    if (!Array.isArray(data.items)) return [];
+
+    const tracks = data.items.map((item) => {
+      const vid = item.id?.videoId;
+      const rawTitle = item.snippet?.title || '';
+      let artist = item.snippet?.channelTitle || 'Unknown Artist';
+      let title = rawTitle;
+
+      if (rawTitle.includes('-')) {
+        const parts = rawTitle.split('-');
+        artist = parts[0].trim();
+        title = parts.slice(1).join('-').trim();
+      }
+
+      // Clean up common video title artifacts
+      title = title.replace(/\(Official Video.*?\)|\[Official Video.*?\]|\(Official Audio.*?\)|\[Official Audio.*?\]|\(Lyrics.*?\)|\[Lyrics.*?\]/gi, '').trim() || rawTitle;
+
+      return {
+        id: `yt_${vid}`,
+        videoId: vid,
+        title,
+        artist,
+        artworkUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '',
+        channelTitle: item.snippet?.channelTitle,
+        source: 'youtube',
+      };
+    }).filter((t) => Boolean(t.videoId));
+
+    setCached(cacheKey, tracks);
+    return tracks;
+  } catch (err) {
+    console.warn('YouTube search failed:', err);
+    return [];
+  }
 };
 
 /**
@@ -71,7 +159,7 @@ export const resolveYouTubeVideoId = async (artist, title) => {
   }
 
   try {
-    const query = `${cleanArtist} - ${cleanTitle} official audio`;
+    const query = `${cleanArtist} - ${cleanTitle} audio`;
     const params = new URLSearchParams({
       part: 'snippet',
       type: 'video',
@@ -88,7 +176,7 @@ export const resolveYouTubeVideoId = async (artist, title) => {
       const reason = errData?.error?.errors?.[0]?.reason;
       if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
         isQuotaExceeded = true;
-        console.warn('YouTube Data API quota exceeded. Falling back to Deezer preview audio.');
+        console.warn('YouTube Data API quota exceeded. Falling back to audio preview.');
       }
       return null;
     }

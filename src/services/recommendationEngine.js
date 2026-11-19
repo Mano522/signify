@@ -1,13 +1,14 @@
 /**
  * Client-Side Recommendation Engine
- * - Builds candidate pool from Last.fm track.getSimilar + tag.getTopTracks (selected mood) + Deezer
+ * - Builds candidate pool from Last.fm track.getSimilar + tag.getTopTracks (selected mood) + iTunes & Deezer
  * - Scores each candidate: similarity + mood match + liked boost - skipped penalty + slight randomness
  * - Guarantees NO repeat songs within a session (sessionPlayed filter)
  * - Maintains 15 tracks in the recommendation queue, refilling in background
  */
 
 import { getSimilarTracks, getTracksByMood, getMoodConfig } from './lastfmService.js';
-import { enrichWithDeezer, searchDeezer } from './deezerService.js';
+import { enrichTrack, searchITunesSongs } from './catalogService.js';
+import { searchDeezer } from './deezerService.js';
 import {
   isSessionPlayed,
   getTrackKey,
@@ -144,14 +145,14 @@ export const generateRecommendations = async ({
     }
   }
 
-  // 3. If pool is small, supplement with Deezer search / chart
+  // 3. If pool is small, supplement with iTunes / Deezer
   if (candidatePool.length < limit) {
     try {
       const query = seedSong?.artist || moodId || 'top hits';
-      const dzTracks = await searchDeezer(query, 20);
-      dzTracks.forEach((track) => addCandidate(track, { match: 0.5 }));
+      const itunesTracks = await searchITunesSongs(query, 15);
+      itunesTracks.forEach((track) => addCandidate(track, { match: 0.5 }));
     } catch (err) {
-      console.warn('Recommendation: error fetching Deezer fallback tracks', err);
+      console.warn('Recommendation: error fetching fallback tracks', err);
     }
   }
 
@@ -167,11 +168,11 @@ export const generateRecommendations = async ({
   // Take the top candidates needed
   const selected = scored.slice(0, limit);
 
-  // Background enrich top items missing artwork with Deezer
+  // Background enrich top items missing artwork
   selected.forEach(async (track) => {
     if (!track.artworkUrl || !track.previewUrl) {
       try {
-        const enriched = await enrichWithDeezer(track.artist, track.title);
+        const enriched = await enrichTrack(track.artist, track.title);
         if (enriched) {
           if (!track.artworkUrl && enriched.artworkUrl) track.artworkUrl = enriched.artworkUrl;
           if (!track.previewUrl && enriched.previewUrl) {

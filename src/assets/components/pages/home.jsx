@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import './home.css';
 
 // Services
-import { MOODS, getTracksByMood, searchTracks as searchLastfmTracks } from '../../../services/lastfmService.js';
-import { searchDeezer, getDeezerTopTracks, enrichWithDeezer } from '../../../services/deezerService.js';
+import { MOODS, getTracksByMood } from '../../../services/lastfmService.js';
+import { searchUniversal, enrichTrack, searchITunesSongs } from '../../../services/catalogService.js';
+import { searchYouTubeVideos } from '../../../services/youtubeService.js';
 import {
   generateRecommendations,
   refillQueueIfNeeded,
@@ -73,8 +74,9 @@ export default function Home() {
   const [volume, setVolume] = useState(80);
   const [previousVolume, setPreviousVolume] = useState(80);
   const [seekTime, setSeekTime] = useState(null);
-  const [activeSource, setActiveSource] = useState('youtube'); // 'youtube' | 'deezer'
+  const [activeSource, setActiveSource] = useState('youtube'); // 'youtube' | 'audio'
   const [isShuffle, setIsShuffle] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
 
   // Toast Notifications
   const [toastMessage, setToastMessage] = useState('');
@@ -120,20 +122,35 @@ export default function Home() {
 
     try {
       // 1. Fetch tracks mapped to this mood from Last.fm
-      const tracks = await getTracksByMood(moodId, 24);
+      let tracks = await getTracksByMood(moodId, 24);
 
-      // 2. Supplement with Deezer top tracks if list is short
-      let fullTracks = tracks;
-      if (fullTracks.length < 12) {
-        const dzTracks = await searchDeezer(moodId, 15);
-        fullTracks = [...fullTracks, ...dzTracks];
+      // 2. If tracks are few or missing artwork, supplement with iTunes / YouTube hits
+      if (tracks.length < 8) {
+        const fallbackQuery = `${moodId} hits`;
+        const itunesTracks = await searchITunesSongs(fallbackQuery, 16);
+        tracks = [...tracks, ...itunesTracks];
       }
 
-      setMoodSongs(fullTracks);
+      // Enrich tracks missing artwork
+      tracks = tracks.map((t) => {
+        if (!t.artworkUrl) {
+          // Asynchronously enrich in background
+          enrichTrack(t.artist, t.title).then((en) => {
+            if (en && en.artworkUrl) {
+              setMoodSongs((prev) =>
+                prev.map((item) => (item.id === t.id ? { ...item, artworkUrl: en.artworkUrl, previewUrl: en.previewUrl } : item))
+              );
+            }
+          });
+        }
+        return t;
+      });
+
+      setMoodSongs(tracks);
 
       // 3. Build initial recommendation queue for this mood
       const initialQueue = await generateRecommendations({
-        seedSong: fullTracks[0] || null,
+        seedSong: tracks[0] || null,
         moodId,
         limit: QUEUE_TARGET_SIZE,
       });
@@ -177,7 +194,6 @@ export default function Home() {
   const playNext = useCallback((wasExplicitSkip = false) => {
     const cur = currentSongRef.current;
     if (cur) {
-      // If user skipped within 30 seconds, record penalty in preference engine
       const playedSeconds = (Date.now() - songStartedAtRef.current) / 1000;
       if (wasExplicitSkip && playedSeconds < 30) {
         recordSkip(cur);
@@ -192,10 +208,8 @@ export default function Home() {
 
     if (unplayedCandidates.length > 0) {
       let nextTrack;
-      let nextIndex = 0;
-
       if (isShuffle) {
-        nextIndex = Math.floor(Math.random() * unplayedCandidates.length);
+        const nextIndex = Math.floor(Math.random() * unplayedCandidates.length);
         nextTrack = unplayedCandidates[nextIndex];
       } else {
         nextTrack = unplayedCandidates[0];
@@ -214,7 +228,6 @@ export default function Home() {
         });
       }
     } else {
-      // If queue is completely exhausted, generate fresh batch
       showToast('Generating fresh recommendations for you...');
       generateRecommendations({
         seedSong: cur,
@@ -235,7 +248,6 @@ export default function Home() {
   const playPrev = useCallback(() => {
     const history = JSON.parse(localStorage.getItem('signify_recently_played') || '[]');
     if (history.length > 1) {
-      // Second item is previous
       const prev = history[1];
       if (prev) {
         playSong(prev);
@@ -248,7 +260,6 @@ export default function Home() {
 
   const togglePlayPause = useCallback(() => {
     if (!currentSong) {
-      // If nothing loaded yet, play first mood song
       if (moodSongs.length > 0) {
         playSong(moodSongs[0]);
       }
@@ -260,10 +271,9 @@ export default function Home() {
   // ── "Radio from this song" ──
   const startRadioFromSong = useCallback((seedTrack) => {
     if (!seedTrack) return;
-    showToast(`📻 Starting radio based on "${seedTrack.title}"...`);
+    showToast(`📻 Starting radio for "${seedTrack.title}"...`);
     playSong(seedTrack);
 
-    // Build new radio queue
     generateRecommendations({
       seedSong: seedTrack,
       moodId: selectedMoodRef.current,
@@ -273,7 +283,7 @@ export default function Home() {
     });
   }, [playSong, showToast]);
 
-  // ── Search handler ──
+  // ── Search handler: Universal Multi-Source Search ──
   const handleSearch = async (overrideQuery) => {
     const q = typeof overrideQuery === 'string' ? overrideQuery : query;
     if (!q || !q.trim()) return;
@@ -295,37 +305,13 @@ export default function Home() {
     });
 
     try {
-      // Search Deezer & Last.fm concurrently
-      const [dzResults, lfmResults] = await Promise.all([
-        searchDeezer(cleanQ, 15),
-        searchLastfmTracks(cleanQ, 15),
-      ]);
+      const results = await searchUniversal(cleanQ);
 
       if (requestId !== searchRequestRef.current) return;
 
-      // Merge results deduplicating by normalized title + artist
-      const seen = new Set();
-      const merged = [];
-
-      dzResults.forEach((t) => {
-        const key = `${t.artist.toLowerCase()}:::${t.title.toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(t);
-        }
-      });
-
-      lfmResults.forEach((t) => {
-        const key = `${t.artist.toLowerCase()}:::${t.title.toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(t);
-        }
-      });
-
-      setSongs(merged);
-      if (merged.length === 0) {
-        setError(`No playable tracks found for "${cleanQ}".`);
+      setSongs(results);
+      if (results.length === 0) {
+        setError(`No playable tracks found for "${cleanQ}". Try another artist or song.`);
       }
     } catch (err) {
       if (requestId === searchRequestRef.current) {
@@ -537,7 +523,7 @@ export default function Home() {
         <div className="search-bar glass">
           <input
             type="text"
-            placeholder="Search for songs, artists, or albums…"
+            placeholder="Search for any song, artist, or album…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -633,17 +619,19 @@ export default function Home() {
       {/* Spacer so floating player never covers content */}
       <div style={{ height: 130 }} />
 
-      {/* Audio Coordinator: YouTube IFrame + Deezer Fallback */}
+      {/* Audio Coordinator: YouTube IFrame + Audio Fallback */}
       <YouTubePlayer
         currentSong={currentSong}
         isPlaying={isPlaying}
         volume={volume}
         seekTime={seekTime}
+        isVideoVisible={isVideoVisible}
         onTimeUpdate={(t) => setElapsed(t)}
         onDurationChange={(d) => setDuration(d)}
         onEnded={() => playNext(false)}
         onError={(msg) => showToast(msg)}
         onSourceChange={(src) => setActiveSource(src)}
+        onToggleVideo={() => setIsVideoVisible((prev) => !prev)}
       />
 
       {/* Floating Bottom Player Bar */}
@@ -664,7 +652,7 @@ export default function Home() {
                 <span className="player-title">{currentSong.title}</span>
                 <span className="player-artist">{currentSong.artist}</span>
                 <span className={`source-badge ${activeSource === 'youtube' ? 'badge-youtube' : 'badge-deezer'}`}>
-                  {activeSource === 'youtube' ? '▶ YouTube Stream' : '🎵 Deezer Preview'}
+                  {activeSource === 'youtube' ? '▶ YouTube Stream' : '🎵 Audio Preview'}
                 </span>
               </div>
               <button
@@ -718,6 +706,15 @@ export default function Home() {
                 title="Radio from this song"
               >
                 📻
+              </button>
+              <button
+                type="button"
+                className="control-btn"
+                style={{ color: isVideoVisible ? '#7C3AED' : '#9CA3AF' }}
+                onClick={() => setIsVideoVisible((prev) => !prev)}
+                title={isVideoVisible ? 'Hide Video' : 'Show Video'}
+              >
+                🎬
               </button>
             </div>
 

@@ -148,11 +148,11 @@ export const enrichWithDeezer = async (artist, title) => {
   const q = `${artist || ''} ${title || ''}`.trim();
   const cacheKey = `dz_enrich_${encodeURIComponent(q.toLowerCase())}`;
   const cached = getCached(cacheKey);
-  if (cached) return cached;
+  if (cached?.previewUrl || cached?.url) return cached;
 
   const results = await searchDeezer(q, 3);
-  if (results && results.length > 0) {
-    const bestMatch = results[0];
+  const bestMatch = results.find((track) => track.previewUrl || track.url);
+  if (bestMatch) {
     setCached(cacheKey, bestMatch);
     return bestMatch;
   }

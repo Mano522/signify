@@ -11,7 +11,8 @@
 import { getCached, setCached } from './cacheService.js';
 
 const LASTFM_BASE = 'https://ws.audioscrobbler.com/2.0/';
-const API_KEY = import.meta.env.VITE_LASTFM_API_KEY || '';
+// Default to tested working Last.fm key if user hasn't set one in .env
+const API_KEY = import.meta.env.VITE_LASTFM_API_KEY || 'b25b959554ed76058ac220b7b2e0a026';
 
 export const MOODS = [
   { id: 'happy', label: 'Happy', emoji: '☀️', tags: ['happy', 'feel good', 'uplifting', 'pop'] },
@@ -243,7 +244,7 @@ export const getTracksByMood = async (moodId, limit = 30) => {
     }
   }
 
-  // If Last.fm API returned no tracks (e.g. no key or rate limited), use curated mood tracks
+  // If Last.fm API returned no tracks (e.g. rate limited), use curated mood tracks
   if (fetchedTracks.length === 0) {
     const curated = CURATED_MOOD_TRACKS[moodKey] || CURATED_MOOD_TRACKS.happy;
     return curated.map((item, idx) => ({
