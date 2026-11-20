@@ -62,7 +62,7 @@ app.get('/api/music/search', async (req, res) => {
   }
 });
 
-const port = Number(env.PORT) || 5000;
+const port = Number(env.PORT) || 5001;
 app.listen(port, () => {
   console.log(`Signify API running on port ${port}`);
 });
