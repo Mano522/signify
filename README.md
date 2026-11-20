@@ -6,8 +6,20 @@ Audius and Jamendo can provide full streams for tracks in their catalogs. Deezer
 
 ## Run locally
 
+Install dependencies:
+
 ```bash
 npm install
+```
+
+Set `JAMENDO_CLIENT_ID` in the root `.env` file, then start the API and frontend
+in separate terminals:
+
+```bash
+npm run dev:api
+```
+
+```bash
 npm run dev
 ```
 

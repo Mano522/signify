@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/api/music': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
       '/api/deezer': {
         target: 'https://api.deezer.com',
         changeOrigin: true,
