@@ -1,6 +1,3 @@
-const CLIENT_ID = '7aaebbab';
-const BASE_URL = 'https://api.jamendo.com/v3.0/tracks/';
-
 const toSong = (track) => {
   return {
     id: String(track.id),
@@ -16,32 +13,30 @@ const toSong = (track) => {
   };
 };
 
-export const fetchRecommendedSongs = async (limit = 25) => {
-  try {
-    const url = `${BASE_URL}?client_id=${CLIENT_ID}&format=json&limit=${limit}&order=popularity_week&audioformat=mp32`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Jamendo API error: ${res.status}`);
-    
-    const data = await res.json();
-    if (!data.results) return [];
-    return data.results.map(toSong);
-  } catch (error) {
-    console.error('Error fetching Jamendo recommendations:', error);
-    return [];
+const fetchTracks = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) {
+    throw new Error(`Jamendo API request failed: ${response.status}`);
   }
+
+  const tracks = await response.json();
+  if (!Array.isArray(tracks)) {
+    throw new Error('Jamendo API returned an invalid track list');
+  }
+
+  return tracks.map(toSong);
+};
+
+export const fetchRecommendedSongs = async (limit = 25) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchTracks(`/api/music/recommendations?${params}`);
 };
 
 export const searchSongs = async (query, limit = 25) => {
   if (!query?.trim()) return fetchRecommendedSongs(limit);
-  try {
-    const params = new URLSearchParams({ q: query.trim() });
-    const response = await fetch(`/api/music/search?${params}`);
-    if (!response.ok) throw new Error(`Jamendo search API error: ${response.status}`);
-
-    const tracks = await response.json();
-    return Array.isArray(tracks) ? tracks.map(toSong) : [];
-  } catch (error) {
-    console.error('Error searching Jamendo tracks:', error);
-    return [];
-  }
+  const params = new URLSearchParams({
+    q: query.trim(),
+    limit: String(limit),
+  });
+  return fetchTracks(`/api/music/search?${params}`);
 };

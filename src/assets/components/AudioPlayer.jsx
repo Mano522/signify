@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { enrichTrack, searchUniversal } from '../../services/catalogService.js';
+import { enrichTrack, searchJamendo } from '../../services/catalogService.js';
 
 const getPlaybackOptions = (track) => {
   const options = [
@@ -92,7 +92,7 @@ const AudioPlayer = ({
 
     if (nextIndex < 0) {
       try {
-        const matches = await searchUniversal(`${song.artist} ${song.title}`);
+        const matches = await searchJamendo(`${song.artist} ${song.title}`);
         if (latestPropsRef.current.currentSong !== song) return;
 
         const exactMatches = matches.filter(
@@ -108,7 +108,7 @@ const AudioPlayer = ({
           (option) => !attemptedUrlsRef.current.has(option.url)
         );
       } catch (error) {
-        console.warn('Unable to search other music providers:', error);
+        console.warn('Unable to search Jamendo for another stream:', error);
       }
     }
 
@@ -121,7 +121,7 @@ const AudioPlayer = ({
     }
 
     latestPropsRef.current.onError?.(
-      `No playable stream for "${song.title}" was found on Audius, Jamendo, or Deezer.`
+      `No playable Jamendo stream for "${song.title}" was found.`
     );
     clearTimeout(skipTimeoutRef.current);
     skipTimeoutRef.current = setTimeout(() => {
@@ -163,7 +163,7 @@ const AudioPlayer = ({
       }
 
       latestPropsRef.current.onError?.(
-        `No playable stream for "${currentSong.title}" was found on Audius, Jamendo, or Deezer.`
+        `No playable Jamendo stream for "${currentSong.title}" was found.`
       );
       skipTimeoutRef.current = setTimeout(() => {
         if (latestPropsRef.current.currentSong === currentSong) {

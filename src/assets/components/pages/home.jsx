@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './home.css';
 
 // Services
-import { MOODS } from '../../../services/lastfmService.js';
-import { fetchCatalogRecommendations, searchUniversal } from '../../../services/catalogService.js';
+import { fetchJamendoRecommendations, searchJamendo } from '../../../services/catalogService.js';
 import {
   generateRecommendations,
   refillQueueIfNeeded,
@@ -50,12 +49,9 @@ export default function Home() {
     }
   });
 
-  // Mood State
-  const [selectedMood, setSelectedMood] = useState('happy');
-
   // Track Lists & Grid
   const [songs, setSongs] = useState([]);
-  const [moodSongs, setMoodSongs] = useState([]);
+  const [recommendedSongs, setRecommendedSongs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
@@ -85,13 +81,11 @@ export default function Home() {
   // Refs
   const currentSongRef = useRef(currentSong);
   const queueRef = useRef(queue);
-  const selectedMoodRef = useRef(selectedMood);
   const searchRequestRef = useRef(0);
   const songStartedAtRef = useRef(Date.now());
 
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
-  useEffect(() => { selectedMoodRef.current = selectedMood; }, [selectedMood]);
 
   // Show temporary toast message
   const showToast = useCallback((msg, durationMs = 3500) => {
@@ -110,39 +104,37 @@ export default function Home() {
     }
   }, [recentSearches]);
 
-  // ── Load Mood Tracks and Initial Queue ──
-  const loadMood = useCallback(async (moodId) => {
-    setSelectedMood(moodId);
+  // ── Load Initial Recommendations and Queue ──
+  const loadRecommendations = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const tracks = await fetchCatalogRecommendations(moodId, 24);
-      setMoodSongs(tracks);
+      const tracks = await fetchJamendoRecommendations('', 24);
+      setRecommendedSongs(tracks);
       if (tracks.length === 0) {
         setQueue([]);
-        setError('No playable tracks are currently available from Audius, Jamendo, or Deezer.');
+        setError('No playable Jamendo tracks are currently available.');
         return;
       }
 
       const initialQueue = await generateRecommendations({
         seedSong: tracks[0] || null,
-        moodId,
         limit: QUEUE_TARGET_SIZE,
       });
       setQueue(initialQueue);
     } catch (err) {
-      console.error('Failed to load mood tracks:', err);
-      setError('Could not load mood recommendations. Please try again.');
+      console.error('Failed to load recommendations:', err);
+      setError('Could not load recommendations. Please try again.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Load default mood on mount
+  // Load recommendations on mount
   useEffect(() => {
-    loadMood('happy');
-  }, [loadMood]);
+    loadRecommendations();
+  }, [loadRecommendations]);
 
   // ── Play a selected song ──
   const playSong = useCallback((song) => {
@@ -161,7 +153,7 @@ export default function Home() {
     setDuration(song.duration || 0);
 
     // Refill recommendation queue in the background
-    refillQueueIfNeeded(queueRef.current, song, selectedMoodRef.current).then((updated) => {
+    refillQueueIfNeeded(queueRef.current, song).then((updated) => {
       setQueue(updated);
     });
   }, []);
@@ -199,7 +191,7 @@ export default function Home() {
 
       // Refill queue in background if dropping low
       if (updatedQueue.length < 8) {
-        refillQueueIfNeeded(updatedQueue, nextTrack, selectedMoodRef.current).then((refilled) => {
+        refillQueueIfNeeded(updatedQueue, nextTrack).then((refilled) => {
           setQueue(refilled);
         });
       }
@@ -207,7 +199,6 @@ export default function Home() {
       showToast('Generating fresh recommendations for you...');
       generateRecommendations({
         seedSong: cur,
-        moodId: selectedMoodRef.current,
         limit: QUEUE_TARGET_SIZE,
       }).then((freshQueue) => {
         if (freshQueue.length > 0) {
@@ -236,13 +227,13 @@ export default function Home() {
 
   const togglePlayPause = useCallback(() => {
     if (!currentSong) {
-      if (moodSongs.length > 0) {
-        playSong(moodSongs[0]);
+      if (recommendedSongs.length > 0) {
+        playSong(recommendedSongs[0]);
       }
       return;
     }
     setIsPlaying((prev) => !prev);
-  }, [currentSong, moodSongs, playSong]);
+  }, [currentSong, recommendedSongs, playSong]);
 
   // ── "Radio from this song" ──
   const startRadioFromSong = useCallback((seedTrack) => {
@@ -252,14 +243,13 @@ export default function Home() {
 
     generateRecommendations({
       seedSong: seedTrack,
-      moodId: selectedMoodRef.current,
       limit: QUEUE_TARGET_SIZE,
     }).then((radioQueue) => {
       setQueue(radioQueue);
     });
   }, [playSong, showToast]);
 
-  // ── Search handler: Universal Multi-Source Search ──
+  // ── Jamendo search handler ──
   const handleSearch = async (overrideQuery) => {
     const q = typeof overrideQuery === 'string' ? overrideQuery : query;
     if (!q || !q.trim()) return;
@@ -281,7 +271,7 @@ export default function Home() {
     });
 
     try {
-      const results = await searchUniversal(cleanQ);
+      const results = await searchJamendo(cleanQ);
 
       if (requestId !== searchRequestRef.current) return;
 
@@ -530,27 +520,6 @@ export default function Home() {
         )}
       </header>
 
-      {/* Mood Buttons Selector */}
-      <div className="mood-container">
-        <span className="mood-title">Browse By Mood & Vibes</span>
-        <div className="mood-bar">
-          {MOODS.map((m) => {
-            const isActive = selectedMood === m.id;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                className={`mood-chip ${isActive ? 'active' : ''}`}
-                onClick={() => loadMood(m.id)}
-              >
-                <span>{m.emoji}</span>
-                <span>{m.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Error Banner */}
       {error && (
         <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#DC2626', padding: '10px 20px', borderRadius: 16, marginBottom: '1.5rem', fontWeight: 500 }}>
@@ -578,15 +547,15 @@ export default function Home() {
         </>
       )}
 
-      {/* Mood Recommendations */}
-      {moodSongs.length > 0 && (
+      {/* Recommendations */}
+      {recommendedSongs.length > 0 && (
         <>
           <div className="section-title" style={{ width: '100%', maxWidth: 1050 }}>
-            <span>{MOODS.find((m) => m.id === selectedMood)?.emoji} {MOODS.find((m) => m.id === selectedMood)?.label} Vibes</span>
+            <span>Recommended for you</span>
             <span style={{ fontSize: '0.9rem', color: '#6B7280', fontWeight: 400 }}>Handpicked & AI-Ranked</span>
           </div>
           <div className="song-grid">
-            {moodSongs.map((song, i) => renderSongCard(song, i))}
+            {recommendedSongs.map((song, i) => renderSongCard(song, i))}
           </div>
         </>
       )}
@@ -594,7 +563,7 @@ export default function Home() {
       {/* Spacer so floating player never covers content */}
       <div style={{ height: 130 }} />
 
-      {/* Audio player with Audius, Jamendo, and Deezer stream fallback */}
+      {/* Jamendo audio player */}
       <AudioPlayer
         currentSong={currentSong}
         isPlaying={isPlaying}
@@ -624,7 +593,7 @@ export default function Home() {
               <div className="player-titles">
                 <span className="player-title">{currentSong.title}</span>
                 <span className="player-artist">{currentSong.artist}</span>
-                <span className={`source-badge badge-${activeSource || currentSong.source || 'audius'}`}>
+                <span className={`source-badge badge-${activeSource || currentSong.source || 'jamendo'}`}>
                   ♪ {(activeSource || currentSong.source || 'audio').toUpperCase()} STREAM
                 </span>
               </div>

@@ -1,13 +1,12 @@
 /**
  * Client-Side Recommendation Engine
- * - Builds candidate pool from playable Audius, Jamendo, and Deezer tracks
- * - Scores each candidate: similarity + mood match + liked boost - skipped penalty + slight randomness
+ * - Builds candidate pool from playable Jamendo tracks
+ * - Scores each candidate: similarity + liked boost - skipped penalty + slight randomness
  * - Guarantees NO repeat songs within a session (sessionPlayed filter)
  * - Maintains 15 tracks in the recommendation queue, refilling in background
  */
 
-import { getMoodConfig } from './lastfmService.js';
-import { fetchCatalogRecommendations, searchUniversal } from './catalogService.js';
+import { fetchJamendoRecommendations, searchJamendo } from './catalogService.js';
 import {
   isSessionPlayed,
   getTrackKey,
@@ -26,7 +25,6 @@ export const scoreCandidate = (
   candidate,
   context = {
     seedSong: null,
-    moodId: null,
     likedArtists: new Set(),
     likedTrackKeys: new Set(),
     skippedTracks: {},
@@ -40,18 +38,7 @@ export const scoreCandidate = (
   const similarityMatch = typeof candidate.match === 'number' ? candidate.match : 0.5;
   score += Math.max(0, Math.min(1, similarityMatch)) * 50;
 
-  // 2. Mood match boost (+30 pts)
-  if (context.moodId) {
-    const candidateMood = (candidate.mood || candidate.moodTag || '').toLowerCase();
-    const targetMood = context.moodId.toLowerCase();
-    const config = getMoodConfig(targetMood);
-    const matchesTag = config && config.tags.some((tag) => candidateMood.includes(tag));
-    if (candidateMood === targetMood || matchesTag) {
-      score += 30;
-    }
-  }
-
-  // 3. Boost for liked artist (+25 pts) and liked track (+40 pts)
+  // 2. Boost for liked artist (+25 pts) and liked track (+40 pts)
   const artistName = (candidate.artist || '').trim().toLowerCase();
   const trackKey = getTrackKey(candidate);
 
@@ -62,18 +49,18 @@ export const scoreCandidate = (
     score += 40;
   }
 
-  // 4. Penalty for skipped tracks / artists
+  // 3. Penalty for skipped tracks / artists
   const trackSkipCount = context.skippedTracks[trackKey] || 0;
   const artistSkipCount = context.skippedArtists[artistName] || 0;
   const totalSkipPenalty = Math.min((trackSkipCount * 30) + (artistSkipCount * 15), 65);
   score -= totalSkipPenalty;
 
-  // 5. Slight penalty for songs in recent listening history (-15 pts) to keep queue fresh
+  // 4. Slight penalty for songs in recent listening history (-15 pts) to keep queue fresh
   if (trackKey && context.recentHistoryKeys.has(trackKey)) {
     score -= 15;
   }
 
-  // 6. Slight randomness for variety (+/- 8 pts)
+  // 5. Slight randomness for variety (+/- 8 pts)
   const jitter = (Math.random() - 0.5) * 16;
   score += jitter;
 
@@ -85,7 +72,6 @@ export const scoreCandidate = (
  */
 export const generateRecommendations = async ({
   seedSong = null,
-  moodId = null,
   excludeKeys = new Set(),
   limit = QUEUE_TARGET_SIZE,
 }) => {
@@ -97,7 +83,6 @@ export const generateRecommendations = async ({
 
   const context = {
     seedSong,
-    moodId,
     likedArtists,
     likedTrackKeys,
     skippedTracks,
@@ -123,28 +108,25 @@ export const generateRecommendations = async ({
     });
   };
 
-  const queries = [...new Set([
-    seedSong?.artist,
-    moodId ? `${moodId} music` : '',
-  ].filter(Boolean))];
+  const queries = [...new Set([seedSong?.artist].filter(Boolean))];
   if (queries.length === 0) queries.push('popular music');
 
-  const providerResults = await Promise.allSettled(queries.map((query) => searchUniversal(query)));
-  providerResults.forEach((result) => {
+  const searchResults = await Promise.allSettled(queries.map((query) => searchJamendo(query)));
+  searchResults.forEach((result) => {
     if (result.status === 'rejected') {
       console.warn('Recommendation catalog search failed:', result.reason);
       return;
     }
-    result.value.forEach((track) => addCandidate(track, { mood: moodId || track.mood, match: 0.6 }));
+    result.value.forEach((track) => addCandidate(track, { match: 0.6 }));
   });
 
-  // Supplement smaller searches with provider recommendations.
+  // Supplement smaller searches with popular Jamendo tracks.
   if (candidatePool.length < limit) {
     try {
-      const tracks = await fetchCatalogRecommendations(moodId, Math.max(limit, 24));
-      tracks.forEach((track) => addCandidate(track, { mood: moodId || track.mood, match: 0.5 }));
+      const tracks = await fetchJamendoRecommendations('', Math.max(limit, 24));
+      tracks.forEach((track) => addCandidate(track, { match: 0.5 }));
     } catch (err) {
-      console.warn('Recommendation: provider fallback failed', err);
+      console.warn('Jamendo recommendation fallback failed:', err);
     }
   }
 
@@ -166,7 +148,7 @@ export const generateRecommendations = async ({
 /**
  * Ensures the queue stays filled up to QUEUE_TARGET_SIZE (15 tracks)
  */
-export const refillQueueIfNeeded = async (currentQueue, seedSong, moodId) => {
+export const refillQueueIfNeeded = async (currentQueue, seedSong) => {
   const needed = QUEUE_TARGET_SIZE - (currentQueue ? currentQueue.length : 0);
   if (needed <= 0) return currentQueue;
 
@@ -175,7 +157,6 @@ export const refillQueueIfNeeded = async (currentQueue, seedSong, moodId) => {
 
   const newTracks = await generateRecommendations({
     seedSong,
-    moodId,
     excludeKeys: existingKeys,
     limit: needed,
   });
